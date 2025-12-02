@@ -1,44 +1,44 @@
 import { ModalSubmitInteraction, MessageFlags } from 'discord.js';
-import { createCheckInEmbed } from '../utils/checkInForm';
-import { saveCheckInData } from '../utils/csvStorage';
-import { getUserData, updateUserCheckIn } from '../utils/userDataManager';
-import { CheckInData } from '../types/userData';
+import { createNightCheckInEmbed } from '../utils/checkInForm';
+import { saveNightCheckInData } from '../utils/csvStorage';
+import { getUserData, updateUserNightCheckIn } from '../utils/userDataManager';
+import { NightCheckInData } from '../types/userData';
 import { generateEmojiBlessing } from '../utils/emojiGenerator';
 
-export async function handleCheckInModal(interaction: ModalSubmitInteraction) {
+export async function handleNightCheckInModal(interaction: ModalSubmitInteraction) {
   try {
     // Defer the reply immediately to avoid timeout
     await interaction.deferReply();
 
     // Get the submitted values
-    const gratefulText = interaction.fields.getTextInputValue('grateful_input');
-    const greatDayText = interaction.fields.getTextInputValue('great_day_input');
+    const highlightsText = interaction.fields.getTextInputValue('highlights_input');
+    const learnedText = interaction.fields.getTextInputValue('learned_input');
 
     // Get free response (it's optional, so use try-catch)
     let freeResponse = '';
     try {
-      freeResponse = interaction.fields.getTextInputValue('free_response');
+      freeResponse = interaction.fields.getTextInputValue('free_response_night');
     } catch {
       // Field is optional, so it's okay if it's not filled
     }
 
     // Parse the input (split by new lines and filter empty lines)
-    const gratefulList = gratefulText
+    const highlightsList = highlightsText
       .split('\n')
       .map(line => line.trim())
       .filter(line => line.length > 0);
 
-    const greatDayList = greatDayText
+    const learnedList = learnedText
       .split('\n')
       .map(line => line.trim())
       .filter(line => line.length > 0);
 
-    // Create check-in data object
-    const checkInData: CheckInData = {
+    // Create night check-in data object
+    const nightCheckInData: NightCheckInData = {
       userId: interaction.user.id,
       timestamp: new Date(),
-      gratefulFor: gratefulList,
-      makeGreat: greatDayList,
+      highlights: highlightsList,
+      learned: learnedList,
       freeResponse: freeResponse.trim() || undefined,
     };
 
@@ -47,14 +47,14 @@ export async function handleCheckInModal(interaction: ModalSubmitInteraction) {
 
     // Save to CSV if enabled (default is true unless user opts out)
     if (userData?.saveToCSV !== false) {
-      await saveCheckInData(checkInData);
+      await saveNightCheckInData(nightCheckInData);
     }
 
-    // Update user's last check-in time
-    await updateUserCheckIn(interaction.user.id);
+    // Update user's last night check-in time
+    await updateUserNightCheckIn(interaction.user.id);
 
     // Create and send the embed immediately
-    const embed = createCheckInEmbed(interaction.user.id, gratefulList, greatDayList, freeResponse);
+    const embed = createNightCheckInEmbed(interaction.user.id, highlightsList, learnedList, freeResponse);
 
     // Edit the deferred reply with the embed
     await interaction.editReply({
@@ -62,7 +62,8 @@ export async function handleCheckInModal(interaction: ModalSubmitInteraction) {
     });
 
     // Generate emoji blessing asynchronously (non-blocking)
-    generateEmojiBlessing(gratefulList, greatDayList, freeResponse)
+    // Use highlights and learned for context instead of grateful/makeGreat
+    generateEmojiBlessing(highlightsList, learnedList, freeResponse)
       .then(async (emojiBlessing) => {
         if (emojiBlessing) {
           // Edit the message to add emojis once they're ready
@@ -71,7 +72,7 @@ export async function handleCheckInModal(interaction: ModalSubmitInteraction) {
               content: emojiBlessing,
               embeds: [embed],
             });
-            console.log('Added emoji blessing to check-in');
+            console.log('Added emoji blessing to night check-in');
           } catch (editError) {
             console.error('Error editing message with emojis:', editError);
           }
@@ -83,9 +84,9 @@ export async function handleCheckInModal(interaction: ModalSubmitInteraction) {
       });
 
   } catch (error) {
-    console.error('Error handling check-in modal:', error);
+    console.error('Error handling night check-in modal:', error);
 
-    const errorMessage = 'There was an error processing your check-in. Please try again.';
+    const errorMessage = 'There was an error processing your nightly reflection. Please try again.';
 
     try {
       // Since we always defer at the start, use editReply for errors

@@ -1,6 +1,6 @@
 import { writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { CheckInData } from '../types/userData';
+import { CheckInData, NightCheckInData } from '../types/userData';
 
 const DATA_DIR = join(process.cwd(), 'data');
 const CSV_DIR = join(DATA_DIR, 'check-ins');
@@ -70,4 +70,54 @@ export function getUserCSVFilePath(userId: string): string | null {
 export function userHasCheckIns(userId: string): boolean {
   const csvPath = getUserCSVPath(userId);
   return existsSync(csvPath);
+}
+
+// Get CSV file path for night check-ins
+function getUserNightCSVPath(userId: string): string {
+  return join(CSV_DIR, `${userId}_night.csv`);
+}
+
+// Save night check-in data to user's CSV file
+export async function saveNightCheckInData(nightCheckInData: NightCheckInData): Promise<void> {
+  try {
+    const csvPath = getUserNightCSVPath(nightCheckInData.userId);
+    const isNewFile = !existsSync(csvPath);
+
+    // Format timestamp
+    const timestamp = nightCheckInData.timestamp.toISOString();
+    const date = nightCheckInData.timestamp.toLocaleDateString();
+    const time = nightCheckInData.timestamp.toLocaleTimeString();
+
+    // Escape and join array values
+    const highlightsStr = nightCheckInData.highlights
+      .map(item => `"${item.replace(/"/g, '""')}"`)
+      .join('; ');
+
+    const learnedStr = nightCheckInData.learned
+      .map(item => `"${item.replace(/"/g, '""')}"`)
+      .join('; ');
+
+    // Escape free response
+    const freeResponseStr = nightCheckInData.freeResponse
+      ? `"${nightCheckInData.freeResponse.replace(/"/g, '""')}"`
+      : '""';
+
+    // Create CSV row
+    const csvRow = `${timestamp},${date},${time},"${highlightsStr}","${learnedStr}",${freeResponseStr}\n`;
+
+    if (isNewFile) {
+      // Write header if new file
+      const header = 'Timestamp,Date,Time,Highlights,What I Learned,Free Response\n';
+      writeFileSync(csvPath, header + csvRow);
+      console.log(`Created new night CSV file for user ${nightCheckInData.userId}`);
+    } else {
+      // Append to existing file
+      appendFileSync(csvPath, csvRow);
+      console.log(`Appended night check-in data for user ${nightCheckInData.userId}`);
+    }
+
+  } catch (error) {
+    console.error(`Error saving night check-in data for user ${nightCheckInData.userId}:`, error);
+    throw error;
+  }
 }

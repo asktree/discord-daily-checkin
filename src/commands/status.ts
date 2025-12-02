@@ -2,6 +2,52 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from '
 import { Command } from '../types/command';
 import { getUserData } from '../utils/userDataManager';
 
+// Helper function to get the last scheduled check-in time
+function getLastScheduledTime(cronPattern: string, now: Date): Date {
+  // Parse the cron pattern (expecting format: "minute hour * * *")
+  const parts = cronPattern.split(' ');
+
+  // Validate we have at least 2 parts and they're numbers
+  let minute = 0;
+  let hour = 0;
+
+  if (parts.length >= 2) {
+    const parsedMinute = parseInt(parts[0]);
+    const parsedHour = parseInt(parts[1]);
+
+    // Validate ranges
+    if (!isNaN(parsedMinute) && parsedMinute >= 0 && parsedMinute < 60) {
+      minute = parsedMinute;
+    }
+    if (!isNaN(parsedHour) && parsedHour >= 0 && parsedHour < 24) {
+      hour = parsedHour;
+    }
+  }
+
+  // Create a date for today at the scheduled time
+  const scheduledToday = new Date(now);
+  scheduledToday.setHours(hour, minute, 0, 0);
+
+  // If the scheduled time hasn't happened yet today, use yesterday's
+  if (now < scheduledToday) {
+    const scheduledYesterday = new Date(scheduledToday);
+    scheduledYesterday.setDate(scheduledYesterday.getDate() - 1);
+    return scheduledYesterday;
+  }
+
+  return scheduledToday;
+}
+
+// Check if check-in was completed since the last scheduled time
+function isCompletedSinceLastSchedule(lastCheckIn: Date | undefined, cronPattern: string): boolean {
+  if (!lastCheckIn) return false;
+
+  const now = new Date();
+  const lastScheduled = getLastScheduledTime(cronPattern, now);
+
+  return new Date(lastCheckIn) >= lastScheduled;
+}
+
 const statusCommand: Command = {
   data: new SlashCommandBuilder()
     .setName('status')
@@ -32,6 +78,10 @@ const statusCommand: Command = {
 
       const userData = await getUserData(targetUser.id);
 
+      // Get cron schedules from environment or use defaults
+      const morningCron = process.env.MORNING_PING_TIME || '0 9 * * *';
+      const nightCron = process.env.NIGHT_PING_TIME || '0 0 * * *';
+
       const embed = new EmbedBuilder()
         .setColor(userData ? 0x00FF00 : 0xFF0000)
         .setTitle('Check-in Status')
@@ -45,21 +95,59 @@ const statusCommand: Command = {
           { name: 'Save to CSV', value: userData.saveToCSV ? 'Yes' : 'No', inline: true }
         );
 
+        // Morning check-in status
+        const morningCompleted = isCompletedSinceLastSchedule(userData.lastCheckIn, morningCron);
+
         if (userData.lastCheckIn) {
           const lastCheckIn = new Date(userData.lastCheckIn);
-          const today = new Date();
-          const isToday = lastCheckIn.toDateString() === today.toDateString();
+
+          // Format time as HH:MM AM/PM
+          const timeString = lastCheckIn.toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+          });
 
           embed.addFields({
-            name: 'Last Check-in',
-            value: isToday ? '✅ Completed today' : `${lastCheckIn.toLocaleDateString()}`,
-            inline: false,
+            name: 'Morning Check-in',
+            value: morningCompleted
+              ? `✅ Completed for current cycle at ${timeString}`
+              : `❌ Not completed this cycle\nLast: ${lastCheckIn.toLocaleDateString()} at ${timeString}`,
+            inline: true,
           });
         } else {
           embed.addFields({
-            name: 'Last Check-in',
-            value: 'No check-ins yet',
-            inline: false,
+            name: 'Morning Check-in',
+            value: '❌ No morning check-ins yet',
+            inline: true,
+          });
+        }
+
+        // Night check-in status
+        const nightCompleted = isCompletedSinceLastSchedule(userData.lastNightCheckIn, nightCron);
+
+        if (userData.lastNightCheckIn) {
+          const lastNightCheckIn = new Date(userData.lastNightCheckIn);
+
+          // Format time as HH:MM AM/PM
+          const timeString = lastNightCheckIn.toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+          });
+
+          embed.addFields({
+            name: 'Night Reflection',
+            value: nightCompleted
+              ? `✅ Completed for current cycle at ${timeString}`
+              : `❌ Not completed this cycle\nLast: ${lastNightCheckIn.toLocaleDateString()} at ${timeString}`,
+            inline: true,
+          });
+        } else {
+          embed.addFields({
+            name: 'Night Reflection',
+            value: '❌ No night reflections yet',
+            inline: true,
           });
         }
       } else {

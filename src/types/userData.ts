@@ -5,6 +5,9 @@ export interface UserData {
   lastCheckIn?: Date;
   lastPing?: Date;
   reminderSent?: boolean;
+  lastNightCheckIn?: Date;
+  lastNightPing?: Date;
+  nightReminderSent?: boolean;
 }
 
 export interface CheckInData {
@@ -12,5 +15,13 @@ export interface CheckInData {
   timestamp: Date;
   gratefulFor: string[];
   makeGreat: string[];
+  freeResponse?: string;
+}
+
+export interface NightCheckInData {
+  userId: string;
+  timestamp: Date;
+  highlights: string[];
+  learned: string[];
   freeResponse?: string;
 }

@@ -1,5 +1,6 @@
-import { Client, Events, Interaction } from 'discord.js';
+import { Client, Events, Interaction, MessageFlags } from 'discord.js';
 import { handleCheckInModal } from '../handlers/checkInHandler';
+import { handleNightCheckInModal } from '../handlers/nightCheckInHandler';
 
 export default {
   name: Events.InteractionCreate,
@@ -20,12 +21,12 @@ export default {
         if (interaction.replied || interaction.deferred) {
           await interaction.followUp({
             content: 'There was an error while executing this command!',
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
         } else {
           await interaction.reply({
             content: 'There was an error while executing this command!',
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
         }
       }
@@ -36,6 +37,9 @@ export default {
       if (interaction.customId === 'start_checkin') {
         const { showCheckInModal } = await import('../utils/checkInForm');
         await showCheckInModal(interaction);
+      } else if (interaction.customId === 'start_night_checkin') {
+        const { showNightCheckInModal } = await import('../utils/checkInForm');
+        await showNightCheckInModal(interaction);
       }
     }
 
@@ -43,6 +47,8 @@ export default {
     if (interaction.isModalSubmit()) {
       if (interaction.customId === 'checkin_modal') {
         await handleCheckInModal(interaction);
+      } else if (interaction.customId === 'night_checkin_modal') {
+        await handleNightCheckInModal(interaction);
       }
     }
   },

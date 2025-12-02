@@ -37,7 +37,7 @@ ${freeResponse ? `- Additional thoughts: ${freeResponse}` : ""}
       messages: [
         {
           role: "user",
-          content: `Based on this daily check-in, provide exactly 5 emojis that serve as a blessing, summary, or vibe for this person's day. The emojis should reflect their gratitude, goals, and overall energy. Only respond with the 5 emojis, nothing else. No spaces between emojis. It should be an aesthetically pleasing arrangement of 5 relevant emojis, as a blessing, symmetry / repetition is okay. ✨✨✨
+          content: `Based on this daily check-in, provide exactly 5 emojis that serve as a blessing, spell, summary, or vibe for this person's day. The emojis should reflect their gratitude, goals, and overall energy. Only respond with the 5 emojis, nothing else. No spaces between emojis. It should be an aesthetically pleasing arrangement of 5 topical emojis. symmetry / repetition is okay. ✨✨✨
 
 ${checkInContext}`,
         },
