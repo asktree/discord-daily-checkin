@@ -5,7 +5,7 @@ import { join } from 'path';
 export async function registerEvents(client: Client) {
   const eventsPath = join(__dirname, '..', 'events');
   const eventFiles = readdirSync(eventsPath).filter(file =>
-    file.endsWith('.ts') || file.endsWith('.js')
+    (file.endsWith('.ts') || file.endsWith('.js')) && !file.endsWith('.d.ts')
   );
 
   for (const file of eventFiles) {

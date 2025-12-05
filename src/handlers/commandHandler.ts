@@ -7,7 +7,7 @@ export async function registerCommands(client: Client) {
   const commands = [];
   const commandsPath = join(__dirname, '..', 'commands');
   const commandFiles = readdirSync(commandsPath).filter(file =>
-    file.endsWith('.ts') || file.endsWith('.js')
+    (file.endsWith('.ts') || file.endsWith('.js')) && !file.endsWith('.d.ts')
   );
 
   for (const file of commandFiles) {
