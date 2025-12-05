@@ -1,14 +1,13 @@
-import { writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
+import { writeFileSync, appendFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { CheckInData, NightCheckInData } from '../types/userData';
+import { getDataDir, ensureDataDirectories } from '../config/dataPath';
 
-const DATA_DIR = join(process.cwd(), 'data');
+// Initialize directories on module load
+ensureDataDirectories();
+
+const DATA_DIR = getDataDir();
 const CSV_DIR = join(DATA_DIR, 'check-ins');
-
-// Ensure CSV directory exists
-if (!existsSync(CSV_DIR)) {
-  mkdirSync(CSV_DIR, { recursive: true });
-}
 
 // Get CSV file path for a user
 function getUserCSVPath(userId: string): string {

@@ -1,14 +1,13 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { UserData } from '../types/userData';
+import { getDataDir, ensureDataDirectories } from '../config/dataPath';
 
-const DATA_DIR = join(process.cwd(), 'data');
+// Initialize directories on module load
+ensureDataDirectories();
+
+const DATA_DIR = getDataDir();
 const USER_DATA_FILE = join(DATA_DIR, 'users.json');
-
-// Ensure data directory exists
-if (!existsSync(DATA_DIR)) {
-  mkdirSync(DATA_DIR, { recursive: true });
-}
 
 // Load all user data from file
 function loadUserData(): Map<string, UserData> {
