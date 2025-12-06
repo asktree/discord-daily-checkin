@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { UserData } from '../types/userData';
 import { getDataDir, ensureDataDirectories } from '../config/dataPath';
+import { toZonedTime } from 'date-fns-tz';
 
 // Initialize directories on module load
 ensureDataDirectories();
@@ -36,9 +37,16 @@ function saveUserData(userData: Map<string, UserData>) {
 }
 
 // Get data for a specific user
-export async function getUserData(userId: string): Promise<UserData | null> {
+export function getUserData(userId: string): UserData | null {
   const userData = loadUserData();
   return userData.get(userId) || null;
+}
+
+// Update user data
+export function updateUserData(userId: string, data: UserData) {
+  const userData = loadUserData();
+  userData.set(userId, data);
+  saveUserData(userData);
 }
 
 // Get all users data
@@ -105,46 +113,36 @@ export async function setReminderSent(userId: string, sent: boolean) {
 }
 
 // Check if user has checked in for the current morning cycle
-export async function hasCheckedInToday(userId: string): Promise<boolean> {
-  const user = await getUserData(userId);
+export function hasCheckedInToday(userId: string): boolean {
+  const user = getUserData(userId);
 
   if (!user || !user.lastCheckIn) {
     return false;
   }
 
-  // Get morning schedule from environment or use default
-  const morningCron = process.env.MORNING_PING_TIME || '0 9 * * *';
-  const parts = morningCron.split(' ');
-
-  let minute = 0;
-  let hour = 9; // default to 9 AM
-
-  if (parts.length >= 2) {
-    const parsedMinute = parseInt(parts[0]);
-    const parsedHour = parseInt(parts[1]);
-
-    if (!isNaN(parsedMinute) && parsedMinute >= 0 && parsedMinute < 60) {
-      minute = parsedMinute;
-    }
-    if (!isNaN(parsedHour) && parsedHour >= 0 && parsedHour < 24) {
-      hour = parsedHour;
-    }
-  }
+  // Get user's timezone and morning time
+  const timezone = user.timezone || 'UTC';
+  const morningTime = user.morningCheckInTime || '09:00';
+  const [hour, minute] = morningTime.split(':').map(Number);
 
   const now = new Date();
   const lastCheckIn = new Date(user.lastCheckIn);
 
-  // Calculate the last scheduled morning check-in time
-  const scheduledToday = new Date(now);
+  // Convert times to user's timezone for comparison
+  const nowInUserTz = toZonedTime(now, timezone);
+  const lastCheckInInUserTz = toZonedTime(lastCheckIn, timezone);
+
+  // Calculate today's scheduled morning check-in time in user's timezone
+  const scheduledToday = new Date(nowInUserTz);
   scheduledToday.setHours(hour, minute, 0, 0);
 
   // If we haven't reached today's scheduled time yet, check against yesterday's
-  const lastScheduledTime = now < scheduledToday
+  const lastScheduledTime = nowInUserTz < scheduledToday
     ? new Date(scheduledToday.getTime() - 24 * 60 * 60 * 1000)
     : scheduledToday;
 
   // User has checked in if their last check-in is after the last scheduled time
-  return lastCheckIn >= lastScheduledTime;
+  return lastCheckInInUserTz >= lastScheduledTime;
 }
 
 // Update user's last night check-in time
@@ -185,44 +183,34 @@ export async function setNightReminderSent(userId: string, sent: boolean) {
 }
 
 // Check if user has done night check-in for the current night cycle
-export async function hasNightCheckInToday(userId: string): Promise<boolean> {
-  const user = await getUserData(userId);
+export function hasNightCheckInToday(userId: string): boolean {
+  const user = getUserData(userId);
 
   if (!user || !user.lastNightCheckIn) {
     return false;
   }
 
-  // Get night schedule from environment or use default
-  const nightCron = process.env.NIGHT_PING_TIME || '0 0 * * *';
-  const parts = nightCron.split(' ');
-
-  let minute = 0;
-  let hour = 0; // default to midnight
-
-  if (parts.length >= 2) {
-    const parsedMinute = parseInt(parts[0]);
-    const parsedHour = parseInt(parts[1]);
-
-    if (!isNaN(parsedMinute) && parsedMinute >= 0 && parsedMinute < 60) {
-      minute = parsedMinute;
-    }
-    if (!isNaN(parsedHour) && parsedHour >= 0 && parsedHour < 24) {
-      hour = parsedHour;
-    }
-  }
+  // Get user's timezone and night time
+  const timezone = user.timezone || 'UTC';
+  const nightTime = user.nightCheckInTime || '21:00';
+  const [hour, minute] = nightTime.split(':').map(Number);
 
   const now = new Date();
   const lastNightCheckIn = new Date(user.lastNightCheckIn);
 
-  // Calculate the last scheduled night check-in time
-  const scheduledToday = new Date(now);
+  // Convert times to user's timezone for comparison
+  const nowInUserTz = toZonedTime(now, timezone);
+  const lastNightCheckInInUserTz = toZonedTime(lastNightCheckIn, timezone);
+
+  // Calculate today's scheduled night check-in time in user's timezone
+  const scheduledToday = new Date(nowInUserTz);
   scheduledToday.setHours(hour, minute, 0, 0);
 
   // If we haven't reached today's scheduled time yet, check against yesterday's
-  const lastScheduledTime = now < scheduledToday
+  const lastScheduledTime = nowInUserTz < scheduledToday
     ? new Date(scheduledToday.getTime() - 24 * 60 * 60 * 1000)
     : scheduledToday;
 
   // User has checked in if their last check-in is after the last scheduled time
-  return lastNightCheckIn >= lastScheduledTime;
+  return lastNightCheckInInUserTz >= lastScheduledTime;
 }

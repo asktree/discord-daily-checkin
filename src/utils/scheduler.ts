@@ -1,5 +1,6 @@
 import * as cron from "node-cron";
 import { Client, TextChannel } from "discord.js";
+import { formatInTimeZone, toZonedTime } from "date-fns-tz";
 import {
   getAllUserData,
   hasCheckedInToday,
@@ -8,213 +9,286 @@ import {
   updateUserNightPing,
   setReminderSent,
   setNightReminderSent,
+  getUserData,
 } from "./userDataManager";
 import { createCheckInButton, createNightCheckInButton } from "./checkInForm";
 
-// Schedule tasks for daily pings
+// Schedule tasks for daily pings with timezone support
 export function initScheduler(client: Client) {
-  console.log("Initializing scheduler...");
+  console.log("Initializing timezone-aware scheduler...");
 
-  // Morning check-in ping (default: 9 AM every day)
-  const morningTime = process.env.MORNING_PING_TIME || "0 9 * * *";
-  cron.schedule(morningTime, async () => {
-    console.log("Running morning check-in pings...");
-    await sendDailyPings(client);
+  // Run every 30 minutes to check for users who need pings
+  cron.schedule("*/30 * * * *", async () => {
+    console.log("Running timezone check for user pings...");
+    await checkUserPings(client);
   });
 
-  // Reminder ping (default: 1 PM every day - 4 hours after morning)
-  const reminderTime = process.env.REMINDER_PING_TIME || "0 13 * * *";
-  cron.schedule(reminderTime, async () => {
-    console.log("Running reminder pings...");
-    await sendReminderPings(client);
-  });
-
-  // Night check-in ping (midnight)
-  const nightTime = process.env.NIGHT_PING_TIME || "0 0 * * *";
-  cron.schedule(nightTime, async () => {
-    console.log("Running night check-in pings...");
-    await sendNightPings(client);
-  });
-
-  // Night reminder ping (2 AM - 2 hours after midnight)
-  const nightReminderTime = process.env.NIGHT_REMINDER_TIME || "0 2 * * *";
-  cron.schedule(nightReminderTime, async () => {
-    console.log("Running night reminder pings...");
-    await sendNightReminderPings(client);
-  });
-
-  // Reset reminder flags at 4 AM (after all check-ins are done)
+  // Reset daily flags at 4 AM UTC (adjust as needed)
   cron.schedule("0 4 * * *", async () => {
     console.log("Resetting daily flags...");
     await resetDailyFlags();
   });
 
-  console.log("Scheduler initialized with:");
-  console.log(`  Morning ping: ${morningTime}`);
-  console.log(`  Reminder ping: ${reminderTime}`);
-  console.log(`  Night ping: ${nightTime}`);
-  console.log(`  Night reminder: ${nightReminderTime}`);
+  console.log("Scheduler initialized with 30-minute checks for per-user timezones");
 }
 
-// Send morning check-in pings to all users
-async function sendDailyPings(client: Client) {
+// Check all users for pings based on their timezone
+async function checkUserPings(client: Client) {
   try {
     const allUsers = await getAllUserData();
+    const now = new Date();
 
     for (const [userId, userData] of allUsers) {
       // Skip if user has no channel configured
       if (!userData.channelId) continue;
 
-      // Skip if user already checked in today
-      if (await hasCheckedInToday(userId)) {
-        console.log(`User ${userId} already checked in today, skipping ping`);
-        continue;
+      // Get user's timezone (default to UTC if not set)
+      const timezone = userData.timezone || "UTC";
+      const morningTime = userData.morningCheckInTime || "09:00";
+      const nightTime = userData.nightCheckInTime || "21:00";
+      const reminderDelay = userData.reminderDelay || 4;
+
+      // Get current time in user's timezone
+      const userNow = toZonedTime(now, timezone);
+      const currentHour = userNow.getHours();
+      const currentMinute = userNow.getMinutes();
+
+      // Parse user's check-in times
+      const [morningHour, morningMinute] = morningTime.split(':').map(Number);
+      const [nightHour, nightMinute] = nightTime.split(':').map(Number);
+
+      // Check for morning ping
+      if (shouldSendMorningPing(currentHour, currentMinute, morningHour, morningMinute, userData, userId)) {
+        await sendMorningPing(client, userId, userData);
       }
 
-      try {
-        const channel = await client.channels.fetch(userData.channelId);
+      // Check for morning reminder
+      if (shouldSendMorningReminder(currentHour, currentMinute, morningHour, morningMinute, reminderDelay, userData, userId)) {
+        await sendMorningReminder(client, userId, userData);
+      }
 
-        if (channel && channel.isTextBased()) {
-          const button = createCheckInButton();
+      // Check for night ping
+      if (shouldSendNightPing(currentHour, currentMinute, nightHour, nightMinute, userData, userId)) {
+        await sendNightPing(client, userId, userData);
+      }
 
-          await (channel as TextChannel).send({
-            content: `Good morning <@${userId}>! 🌅\n\nIt's time for your daily check-in.`,
-            components: [button],
-          });
-
-          await updateUserPing(userId);
-          console.log(`Sent morning ping to user ${userId}`);
-        }
-      } catch (error) {
-        console.error(`Error sending ping to user ${userId}:`, error);
+      // Check for night reminder
+      if (shouldSendNightReminder(currentHour, currentMinute, nightHour, nightMinute, reminderDelay, userData, userId)) {
+        await sendNightReminder(client, userId, userData);
       }
     }
   } catch (error) {
-    console.error("Error in sendDailyPings:", error);
+    console.error("Error in checkUserPings:", error);
   }
 }
 
-// Send reminder pings to users who haven't checked in
-async function sendReminderPings(client: Client) {
+// Helper function to check if we're within 30 minutes of a target time
+function isWithinTimeWindow(currentHour: number, currentMinute: number, targetHour: number, targetMinute: number): boolean {
+  const currentTotalMinutes = currentHour * 60 + currentMinute;
+  const targetTotalMinutes = targetHour * 60 + targetMinute;
+
+  // Check if we're within 0-29 minutes after the target time
+  const diff = currentTotalMinutes - targetTotalMinutes;
+  return diff >= 0 && diff < 30;
+}
+
+function shouldSendMorningPing(currentHour: number, currentMinute: number, morningHour: number, morningMinute: number, userData: any, userId: string): boolean {
+  // Check if it's time for morning ping
+  if (!isWithinTimeWindow(currentHour, currentMinute, morningHour, morningMinute)) {
+    return false;
+  }
+
+  // Check if already pinged today
+  if (userData.lastPing) {
+    const lastPingDate = new Date(userData.lastPing);
+    const now = new Date();
+    const timezone = userData.timezone || "UTC";
+
+    // Convert both times to user's timezone for comparison
+    const lastPingUserTz = formatInTimeZone(lastPingDate, timezone, 'yyyy-MM-dd');
+    const nowUserTz = formatInTimeZone(now, timezone, 'yyyy-MM-dd');
+
+    if (lastPingUserTz === nowUserTz) {
+      return false; // Already pinged today
+    }
+  }
+
+  // Check if already checked in today
+  if (hasCheckedInToday(userId)) {
+    return false;
+  }
+
+  return true;
+}
+
+function shouldSendMorningReminder(currentHour: number, currentMinute: number, morningHour: number, morningMinute: number, reminderDelay: number, userData: any, userId: string): boolean {
+  // Calculate reminder time
+  const reminderHour = (morningHour + reminderDelay) % 24;
+
+  // Check if it's time for reminder
+  if (!isWithinTimeWindow(currentHour, currentMinute, reminderHour, morningMinute)) {
+    return false;
+  }
+
+  // Skip if reminder already sent
+  if (userData.reminderSent) {
+    return false;
+  }
+
+  // Skip if user already checked in
+  if (hasCheckedInToday(userId)) {
+    return false;
+  }
+
+  // Only send reminder if morning ping was sent
+  if (!userData.lastPing) {
+    return false;
+  }
+
+  return true;
+}
+
+function shouldSendNightPing(currentHour: number, currentMinute: number, nightHour: number, nightMinute: number, userData: any, userId: string): boolean {
+  // Check if it's time for night ping
+  if (!isWithinTimeWindow(currentHour, currentMinute, nightHour, nightMinute)) {
+    return false;
+  }
+
+  // Check if already pinged tonight
+  if (userData.lastNightPing) {
+    const lastPingDate = new Date(userData.lastNightPing);
+    const now = new Date();
+    const timezone = userData.timezone || "UTC";
+
+    // Convert both times to user's timezone for comparison
+    const lastPingUserTz = formatInTimeZone(lastPingDate, timezone, 'yyyy-MM-dd');
+    const nowUserTz = formatInTimeZone(now, timezone, 'yyyy-MM-dd');
+
+    if (lastPingUserTz === nowUserTz) {
+      return false; // Already pinged today
+    }
+  }
+
+  // Check if already checked in tonight
+  if (hasNightCheckInToday(userId)) {
+    return false;
+  }
+
+  return true;
+}
+
+function shouldSendNightReminder(currentHour: number, currentMinute: number, nightHour: number, nightMinute: number, reminderDelay: number, userData: any, userId: string): boolean {
+  // Calculate reminder time (handle day wrap-around)
+  const reminderHour = (nightHour + reminderDelay) % 24;
+
+  // Check if it's time for reminder
+  if (!isWithinTimeWindow(currentHour, currentMinute, reminderHour, nightMinute)) {
+    return false;
+  }
+
+  // Skip if reminder already sent
+  if (userData.nightReminderSent) {
+    return false;
+  }
+
+  // Skip if user already checked in
+  if (hasNightCheckInToday(userId)) {
+    return false;
+  }
+
+  // Only send reminder if night ping was sent
+  if (!userData.lastNightPing) {
+    return false;
+  }
+
+  return true;
+}
+
+// Send morning check-in ping to a specific user
+async function sendMorningPing(client: Client, userId: string, userData: any) {
   try {
-    const allUsers = await getAllUserData();
+    const channel = await client.channels.fetch(userData.channelId);
 
-    for (const [userId, userData] of allUsers) {
-      // Skip if user has no channel configured
-      if (!userData.channelId) continue;
+    if (channel && channel.isTextBased()) {
+      const button = createCheckInButton();
+      const timezone = userData.timezone || "UTC";
+      const timeStr = formatInTimeZone(new Date(), timezone, 'h:mm a zzz');
 
-      // Skip if reminder already sent
-      if (userData.reminderSent) continue;
+      await (channel as TextChannel).send({
+        content: `Good morning <@${userId}>! 🌅\n\nIt's time for your daily check-in. (${timeStr})`,
+        components: [button],
+      });
 
-      // Skip if user already checked in today
-      if (await hasCheckedInToday(userId)) {
-        console.log(
-          `User ${userId} checked in after morning ping, skipping reminder`
-        );
-        continue;
-      }
-
-      try {
-        const channel = await client.channels.fetch(userData.channelId);
-
-        if (channel && channel.isTextBased()) {
-          const button = createCheckInButton();
-
-          await (channel as TextChannel).send({
-            content: `Hey <@${userId}>, this is a friendly reminder to complete your daily check-in! 📝\n\nTaking a few moments for reflection can help set a positive tone for your day.`,
-            components: [button],
-          });
-
-          await setReminderSent(userId, true);
-          console.log(`Sent reminder ping to user ${userId}`);
-        }
-      } catch (error) {
-        console.error(`Error sending reminder to user ${userId}:`, error);
-      }
+      await updateUserPing(userId);
+      console.log(`Sent morning ping to user ${userId} in timezone ${timezone}`);
     }
   } catch (error) {
-    console.error("Error in sendReminderPings:", error);
+    console.error(`Error sending morning ping to user ${userId}:`, error);
   }
 }
 
-// Send night check-in pings to all users
-async function sendNightPings(client: Client) {
+// Send morning reminder to a specific user
+async function sendMorningReminder(client: Client, userId: string, userData: any) {
   try {
-    const allUsers = await getAllUserData();
+    const channel = await client.channels.fetch(userData.channelId);
 
-    for (const [userId, userData] of allUsers) {
-      // Skip if user has no channel configured
-      if (!userData.channelId) continue;
+    if (channel && channel.isTextBased()) {
+      const button = createCheckInButton();
 
-      // Skip if user already did night check-in today
-      if (await hasNightCheckInToday(userId)) {
-        console.log(`User ${userId} already did night check-in, skipping ping`);
-        continue;
-      }
+      await (channel as TextChannel).send({
+        content: `Hey <@${userId}>, this is a friendly reminder to complete your daily check-in! 📝\n\nTaking a few moments for reflection can help set a positive tone for your day.`,
+        components: [button],
+      });
 
-      try {
-        const channel = await client.channels.fetch(userData.channelId);
-
-        if (channel && channel.isTextBased()) {
-          const button = createNightCheckInButton();
-
-          await (channel as TextChannel).send({
-            content: `Good evening <@${userId}>! 🌙\n\nIt's time for your nightly reflection ✨`,
-            components: [button],
-          });
-
-          await updateUserNightPing(userId);
-          console.log(`Sent night ping to user ${userId}`);
-        }
-      } catch (error) {
-        console.error(`Error sending night ping to user ${userId}:`, error);
-      }
+      await setReminderSent(userId, true);
+      console.log(`Sent morning reminder to user ${userId}`);
     }
   } catch (error) {
-    console.error("Error in sendNightPings:", error);
+    console.error(`Error sending morning reminder to user ${userId}:`, error);
   }
 }
 
-// Send night reminder pings to users who haven't done night check-in
-async function sendNightReminderPings(client: Client) {
+// Send night check-in ping to a specific user
+async function sendNightPing(client: Client, userId: string, userData: any) {
   try {
-    const allUsers = await getAllUserData();
+    const channel = await client.channels.fetch(userData.channelId);
 
-    for (const [userId, userData] of allUsers) {
-      // Skip if user has no channel configured
-      if (!userData.channelId) continue;
+    if (channel && channel.isTextBased()) {
+      const button = createNightCheckInButton();
+      const timezone = userData.timezone || "UTC";
+      const timeStr = formatInTimeZone(new Date(), timezone, 'h:mm a zzz');
 
-      // Skip if reminder already sent
-      if (userData.nightReminderSent) continue;
+      await (channel as TextChannel).send({
+        content: `Good evening <@${userId}>! 🌙\n\nIt's time for your nightly reflection ✨ (${timeStr})`,
+        components: [button],
+      });
 
-      // Skip if user already did night check-in today
-      if (await hasNightCheckInToday(userId)) {
-        console.log(
-          `User ${userId} completed night check-in after initial ping, skipping reminder`
-        );
-        continue;
-      }
-
-      try {
-        const channel = await client.channels.fetch(userData.channelId);
-
-        if (channel && channel.isTextBased()) {
-          const button = createNightCheckInButton();
-
-          await (channel as TextChannel).send({
-            content: `Hey <@${userId}>, this is a reminder to complete your nightly reflection! 🩷`,
-            components: [button],
-          });
-
-          await setNightReminderSent(userId, true);
-          console.log(`Sent night reminder ping to user ${userId}`);
-        }
-      } catch (error) {
-        console.error(`Error sending night reminder to user ${userId}:`, error);
-      }
+      await updateUserNightPing(userId);
+      console.log(`Sent night ping to user ${userId} in timezone ${timezone}`);
     }
   } catch (error) {
-    console.error("Error in sendNightReminderPings:", error);
+    console.error(`Error sending night ping to user ${userId}:`, error);
+  }
+}
+
+// Send night reminder to a specific user
+async function sendNightReminder(client: Client, userId: string, userData: any) {
+  try {
+    const channel = await client.channels.fetch(userData.channelId);
+
+    if (channel && channel.isTextBased()) {
+      const button = createNightCheckInButton();
+
+      await (channel as TextChannel).send({
+        content: `Hey <@${userId}>, this is a reminder to complete your nightly reflection! 🩷`,
+        components: [button],
+      });
+
+      await setNightReminderSent(userId, true);
+      console.log(`Sent night reminder to user ${userId}`);
+    }
+  } catch (error) {
+    console.error(`Error sending night reminder to user ${userId}:`, error);
   }
 }
 
@@ -223,9 +297,31 @@ async function resetDailyFlags() {
   try {
     const allUsers = await getAllUserData();
 
-    for (const [userId] of allUsers) {
-      await setReminderSent(userId, false);
-      await setNightReminderSent(userId, false);
+    for (const [userId, userData] of allUsers) {
+      // Only reset flags if they're in a new day (based on their timezone)
+      const timezone = userData.timezone || "UTC";
+      const now = new Date();
+
+      // Check if it's a new day for this user
+      if (userData.lastPing) {
+        const lastPingDate = new Date(userData.lastPing);
+        const lastPingUserTz = formatInTimeZone(lastPingDate, timezone, 'yyyy-MM-dd');
+        const nowUserTz = formatInTimeZone(now, timezone, 'yyyy-MM-dd');
+
+        if (lastPingUserTz !== nowUserTz) {
+          await setReminderSent(userId, false);
+        }
+      }
+
+      if (userData.lastNightPing) {
+        const lastNightPingDate = new Date(userData.lastNightPing);
+        const lastNightPingUserTz = formatInTimeZone(lastNightPingDate, timezone, 'yyyy-MM-dd');
+        const nowUserTz = formatInTimeZone(now, timezone, 'yyyy-MM-dd');
+
+        if (lastNightPingUserTz !== nowUserTz) {
+          await setNightReminderSent(userId, false);
+        }
+      }
     }
 
     console.log("Daily flags reset successfully");
@@ -238,25 +334,13 @@ async function resetDailyFlags() {
 export async function triggerMorningPing(client: Client, userId?: string) {
   if (userId) {
     // Ping specific user
-    const userData = await getAllUserData();
-    const user = userData.get(userId);
+    const userData = getUserData(userId);
 
-    if (user && user.channelId) {
-      const channel = await client.channels.fetch(user.channelId);
-
-      if (channel && channel.isTextBased()) {
-        const button = createCheckInButton();
-
-        await (channel as TextChannel).send({
-          content: `Good morning <@${userId}>! 🌅\n\nIt's time for your daily check-in.\n\n*(Manual trigger for testing)*`,
-          components: [button],
-        });
-
-        await updateUserPing(userId);
-      }
+    if (userData && userData.channelId) {
+      await sendMorningPing(client, userId, userData);
     }
   } else {
-    // Ping all users
-    await sendDailyPings(client);
+    // Ping all eligible users
+    await checkUserPings(client);
   }
 }

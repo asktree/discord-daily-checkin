@@ -51,6 +51,9 @@ export default {
         await handleCheckInModal(interaction);
       } else if (interaction.customId === "night_checkin_modal") {
         await handleNightCheckInModal(interaction);
+      } else if (interaction.customId === "timezone-times") {
+        const { handleTimezoneTimesModal } = await import("../handlers/timezoneHandler");
+        await handleTimezoneTimesModal(interaction);
       }
     }
   },
