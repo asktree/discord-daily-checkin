@@ -1,6 +1,7 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { getUserData, updateUserData } from '../utils/userDataManager';
 import { formatInTimeZone } from 'date-fns-tz';
+import { scheduleUserCrons } from '../utils/cronManager';
 
 // Common timezones grouped by region
 const TIMEZONE_OPTIONS = {
@@ -130,6 +131,9 @@ async function handleTimezoneSet(interaction: ChatInputCommandInteraction, userI
       // Update user's timezone
       userData.timezone = timezone;
       updateUserData(userId, userData);
+
+      // Reschedule user's cron jobs with new timezone
+      scheduleUserCrons(userId, userData, interaction.client!);
 
       // Show current time in their timezone
       const currentTime = formatInTimeZone(new Date(), timezone, 'h:mm a zzz');

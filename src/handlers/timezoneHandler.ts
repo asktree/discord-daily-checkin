@@ -1,5 +1,6 @@
 import { ModalSubmitInteraction } from 'discord.js';
 import { getUserData, updateUserData } from '../utils/userDataManager';
+import { scheduleUserCrons } from '../utils/cronManager';
 
 export async function handleTimezoneTimesModal(interaction: ModalSubmitInteraction) {
   try {
@@ -44,6 +45,9 @@ export async function handleTimezoneTimesModal(interaction: ModalSubmitInteracti
     userData.nightCheckInTime = nightTime;
     userData.reminderDelay = reminderDelayNum;
     updateUserData(userId, userData);
+
+    // Reschedule user's cron jobs with new times
+    scheduleUserCrons(userId, userData, interaction.client);
 
     // Send confirmation
     let message = `✅ Check-in times updated!\n\n`;

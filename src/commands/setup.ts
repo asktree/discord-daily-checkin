@@ -5,7 +5,8 @@ import {
   ChannelType
 } from 'discord.js';
 import { Command } from '../types/command';
-import { setUserChannel } from '../utils/userDataManager';
+import { setUserChannel, getUserData } from '../utils/userDataManager';
+import { scheduleUserCrons } from '../utils/cronManager';
 
 const setupCommand: Command = {
   data: new SlashCommandBuilder()
@@ -50,9 +51,17 @@ const setupCommand: Command = {
       // Save user channel configuration
       await setUserChannel(user.id, channel.id, saveToCSV);
 
+      // Schedule cron jobs for the user
+      const userData = getUserData(user.id);
+      if (userData) {
+        scheduleUserCrons(user.id, userData, interaction.client);
+      }
+
       await interaction.reply({
         content: `✅ Daily check-in has been set up for <@${user.id}> in <#${channel.id}>\n` +
-                 `CSV saving: ${saveToCSV ? 'Enabled' : 'Disabled'}`,
+                 `CSV saving: ${saveToCSV ? 'Enabled' : 'Disabled'}\n` +
+                 `📍 Default check-in times: 9:00 AM and 9:00 PM (UTC)\n` +
+                 `💡 User can customize times and timezone with \`/timing zone\` and \`/timing set\``,
         ephemeral: true,
       });
 
