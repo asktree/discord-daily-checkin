@@ -24,7 +24,7 @@ function createCheckInModal(): ModalBuilder {
     .setPlaceholder('Enter 2-3 things you are grateful for, one per line')
     .setRequired(true)
     .setMinLength(1)
-    .setMaxLength(500);
+    .setMaxLength(2000);
 
   // What would make today great input
   const greatDayInput = new TextInputBuilder()
@@ -34,7 +34,7 @@ function createCheckInModal(): ModalBuilder {
     .setPlaceholder('Enter 2-3 things that would make today great, one per line')
     .setRequired(true)
     .setMinLength(1)
-    .setMaxLength(500);
+    .setMaxLength(2000);
 
   // Free response input
   const freeResponseInput = new TextInputBuilder()
@@ -44,7 +44,7 @@ function createCheckInModal(): ModalBuilder {
     .setPlaceholder('Anything else you want to share?')
     .setRequired(false)
     .setMinLength(1)
-    .setMaxLength(1000);
+    .setMaxLength(4000);
 
   // Create action rows
   const firstActionRow = new ActionRowBuilder<TextInputBuilder>().addComponents(gratefulInput);
@@ -70,7 +70,7 @@ function createNightCheckInModal(): ModalBuilder {
     .setPlaceholder('Enter 2-3 highlights from your day, one per line')
     .setRequired(true)
     .setMinLength(1)
-    .setMaxLength(500);
+    .setMaxLength(2000);
 
   // What I learned today
   const learnedInput = new TextInputBuilder()
@@ -80,7 +80,7 @@ function createNightCheckInModal(): ModalBuilder {
     .setPlaceholder('Enter 2-3 things you learned today, one per line')
     .setRequired(true)
     .setMinLength(1)
-    .setMaxLength(500);
+    .setMaxLength(2000);
 
   // Free response input
   const freeResponseInput = new TextInputBuilder()
@@ -90,7 +90,7 @@ function createNightCheckInModal(): ModalBuilder {
     .setPlaceholder('Anything else you want to share?')
     .setRequired(false)
     .setMinLength(1)
-    .setMaxLength(1000);
+    .setMaxLength(4000);
 
   // Create action rows
   const firstActionRow = new ActionRowBuilder<TextInputBuilder>().addComponents(highlightsInput);
