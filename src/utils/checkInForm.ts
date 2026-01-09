@@ -24,7 +24,7 @@ function createCheckInModal(): ModalBuilder {
     .setPlaceholder('Enter 2-3 things you are grateful for, one per line')
     .setRequired(true)
     .setMinLength(1)
-    .setMaxLength(2000);
+    .setMaxLength(1024);
 
   // What would make today great input
   const greatDayInput = new TextInputBuilder()
@@ -34,7 +34,7 @@ function createCheckInModal(): ModalBuilder {
     .setPlaceholder('Enter 2-3 things that would make today great, one per line')
     .setRequired(true)
     .setMinLength(1)
-    .setMaxLength(2000);
+    .setMaxLength(1024);
 
   // Free response input
   const freeResponseInput = new TextInputBuilder()
@@ -70,7 +70,7 @@ function createNightCheckInModal(): ModalBuilder {
     .setPlaceholder('Enter 2-3 highlights from your day, one per line')
     .setRequired(true)
     .setMinLength(1)
-    .setMaxLength(2000);
+    .setMaxLength(1024);
 
   // What I learned today
   const learnedInput = new TextInputBuilder()
@@ -80,7 +80,7 @@ function createNightCheckInModal(): ModalBuilder {
     .setPlaceholder('Enter 2-3 things you learned today, one per line')
     .setRequired(true)
     .setMinLength(1)
-    .setMaxLength(2000);
+    .setMaxLength(1024);
 
   // Free response input
   const freeResponseInput = new TextInputBuilder()
@@ -164,13 +164,45 @@ export function createCheckInEmbed(
       }
     );
 
-  // Add free response field if provided
+  // Add free response field(s) if provided
   if (freeResponse && freeResponse.trim()) {
-    embed.addFields({
-      name: 'Free response',
-      value: freeResponse,
-      inline: false,
-    });
+    const maxFieldLength = 1024;
+    const response = freeResponse.trim();
+
+    if (response.length <= maxFieldLength) {
+      embed.addFields({
+        name: 'Free response',
+        value: response,
+        inline: false,
+      });
+    } else {
+      // Split into multiple fields for long responses
+      const chunks: string[] = [];
+      let remaining = response;
+      while (remaining.length > 0) {
+        if (remaining.length <= maxFieldLength) {
+          chunks.push(remaining);
+          break;
+        }
+        // Try to split at a newline or space near the limit
+        let splitIndex = remaining.lastIndexOf('\n', maxFieldLength);
+        if (splitIndex === -1 || splitIndex < maxFieldLength / 2) {
+          splitIndex = remaining.lastIndexOf(' ', maxFieldLength);
+        }
+        if (splitIndex === -1 || splitIndex < maxFieldLength / 2) {
+          splitIndex = maxFieldLength;
+        }
+        chunks.push(remaining.slice(0, splitIndex));
+        remaining = remaining.slice(splitIndex).trimStart();
+      }
+
+      chunks.forEach((chunk, index) => {
+        const name = chunks.length === 1
+          ? 'Free response'
+          : `Free response (${index + 1}/${chunks.length})`;
+        embed.addFields({ name, value: chunk, inline: false });
+      });
+    }
   }
 
   embed.setTimestamp().setFooter({ text: 'Daily Check-in' });
@@ -201,13 +233,45 @@ export function createNightCheckInEmbed(
       }
     );
 
-  // Add free response field if provided
+  // Add free response field(s) if provided
   if (freeResponse && freeResponse.trim()) {
-    embed.addFields({
-      name: 'Free response',
-      value: freeResponse,
-      inline: false,
-    });
+    const maxFieldLength = 1024;
+    const response = freeResponse.trim();
+
+    if (response.length <= maxFieldLength) {
+      embed.addFields({
+        name: 'Free response',
+        value: response,
+        inline: false,
+      });
+    } else {
+      // Split into multiple fields for long responses
+      const chunks: string[] = [];
+      let remaining = response;
+      while (remaining.length > 0) {
+        if (remaining.length <= maxFieldLength) {
+          chunks.push(remaining);
+          break;
+        }
+        // Try to split at a newline or space near the limit
+        let splitIndex = remaining.lastIndexOf('\n', maxFieldLength);
+        if (splitIndex === -1 || splitIndex < maxFieldLength / 2) {
+          splitIndex = remaining.lastIndexOf(' ', maxFieldLength);
+        }
+        if (splitIndex === -1 || splitIndex < maxFieldLength / 2) {
+          splitIndex = maxFieldLength;
+        }
+        chunks.push(remaining.slice(0, splitIndex));
+        remaining = remaining.slice(splitIndex).trimStart();
+      }
+
+      chunks.forEach((chunk, index) => {
+        const name = chunks.length === 1
+          ? 'Free response'
+          : `Free response (${index + 1}/${chunks.length})`;
+        embed.addFields({ name, value: chunk, inline: false });
+      });
+    }
   }
 
   embed.setTimestamp().setFooter({ text: 'Nightly Reflection' });
