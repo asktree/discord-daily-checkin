@@ -27,10 +27,11 @@ export async function registerCommands(client: Client) {
   try {
     console.log('Refreshing application (/) commands...');
 
-    if (process.env.GUILD_ID) {
+    const guildId = process.env.GUILD_ID?.trim();
+    if (guildId) {
       // Guild-specific commands (faster for development)
       await rest.put(
-        Routes.applicationGuildCommands(process.env.CLIENT_ID!, process.env.GUILD_ID),
+        Routes.applicationGuildCommands(process.env.CLIENT_ID!, guildId),
         { body: commands },
       );
     } else {
