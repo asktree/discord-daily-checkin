@@ -1,6 +1,7 @@
 export interface UserData {
   userId: string;
   channelId: string;
+  useDM?: boolean;
   saveToCSV: boolean;
   lastCheckIn?: Date;
   lastPing?: Date;

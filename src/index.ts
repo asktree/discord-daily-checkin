@@ -1,9 +1,10 @@
-import { Client, GatewayIntentBits, Collection } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, Collection } from 'discord.js';
 import * as dotenv from 'dotenv';
 import { registerEvents } from './handlers/eventHandler';
 import { registerCommands } from './handlers/commandHandler';
 import { initScheduler } from './utils/scheduler';
 import { Command } from './types/command';
+import { migrateUserDataToDM } from './utils/migrate';
 
 // Load environment variables
 dotenv.config();
@@ -15,6 +16,10 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.DirectMessages,
+  ],
+  partials: [
+    Partials.Channel, // Required to receive DM interactions
   ],
 });
 
@@ -24,6 +29,9 @@ client.commands = new Collection<string, Command>();
 // Initialize bot
 async function init() {
   try {
+    // One-time data migration for DM support
+    migrateUserDataToDM();
+
     // Register event handlers
     await registerEvents(client);
 

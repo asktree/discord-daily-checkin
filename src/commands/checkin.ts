@@ -13,9 +13,9 @@ const checkinCommand: Command = {
       // Check if user has a channel set up
       const userData = await getUserData(interaction.user.id);
 
-      if (!userData || !userData.channelId) {
+      if (!userData || (!userData.channelId && !userData.useDM)) {
         await interaction.reply({
-          content: '❌ You don\'t have a check-in channel set up yet. Ask an admin to use `/setup` to configure one for you.',
+          content: '❌ You don\'t have check-ins set up yet. Ask an admin to use `/setup` to configure check-ins for you.',
           ephemeral: true,
         });
         return;

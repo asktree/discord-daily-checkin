@@ -21,8 +21,8 @@ const setupCommand: Command = {
     .addChannelOption(option =>
       option
         .setName('channel')
-        .setDescription('The channel for daily check-ins')
-        .setRequired(true)
+        .setDescription('The channel for daily check-ins (omit for DMs)')
+        .setRequired(false)
         .addChannelTypes(ChannelType.GuildText)
     )
     .addBooleanOption(option =>
@@ -31,25 +31,39 @@ const setupCommand: Command = {
         .setDescription('Whether to save check-ins to CSV (default: true)')
         .setRequired(false)
     )
+    .addBooleanOption(option =>
+      option
+        .setName('use_dm')
+        .setDescription('Send check-in pings via DM instead of a channel (default: false)')
+        .setRequired(false)
+    )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels) as SlashCommandBuilder,
 
   async execute(interaction: ChatInputCommandInteraction) {
     try {
       const user = interaction.options.getUser('user', true);
-      const channel = interaction.options.getChannel('channel', true);
+      const channel = interaction.options.getChannel('channel');
       const saveToCSV = interaction.options.getBoolean('save_to_csv') ?? true;
+      const useDM = interaction.options.getBoolean('use_dm') ?? !channel;
 
-      // Validate that the channel is a text channel
-      if (channel.type !== ChannelType.GuildText) {
+      if (!useDM && !channel) {
         await interaction.reply({
-          content: 'Please select a text channel for check-ins.',
+          content: '❌ Please either specify a channel or set `use_dm` to true.',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      if (!useDM && channel && channel.type !== ChannelType.GuildText) {
+        await interaction.reply({
+          content: '❌ Please select a text channel for check-ins.',
           ephemeral: true,
         });
         return;
       }
 
       // Save user channel configuration
-      await setUserChannel(user.id, channel.id, saveToCSV);
+      await setUserChannel(user.id, channel?.id || '', saveToCSV, useDM);
 
       // Schedule cron jobs for the user
       const userData = getUserData(user.id);
@@ -57,8 +71,12 @@ const setupCommand: Command = {
         scheduleUserCrons(user.id, userData, interaction.client);
       }
 
+      const destination = useDM
+        ? 'via **DMs**'
+        : `in <#${channel!.id}>`;
+
       await interaction.reply({
-        content: `✅ Daily check-in has been set up for <@${user.id}> in <#${channel.id}>\n` +
+        content: `✅ Daily check-in has been set up for <@${user.id}> ${destination}\n` +
                  `CSV saving: ${saveToCSV ? 'Enabled' : 'Disabled'}\n` +
                  `📍 Default check-in times: 9:00 AM and 9:00 PM (UTC)\n` +
                  `💡 User can customize times and timezone with \`/timing zone\` and \`/timing set\``,

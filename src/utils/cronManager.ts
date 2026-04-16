@@ -29,8 +29,8 @@ export function scheduleUserCrons(userId: string, userData: UserData, client: Cl
   // Clear existing cron jobs for this user
   clearUserCrons(userId);
 
-  if (!userData.channelId) {
-    console.log(`User ${userId} has no channel configured, skipping cron setup`);
+  if (!userData.useDM && !userData.channelId) {
+    console.log(`User ${userId} has no channel or DM configured, skipping cron setup`);
     return;
   }
 

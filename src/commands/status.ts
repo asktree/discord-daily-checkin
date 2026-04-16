@@ -22,6 +22,7 @@ const statusCommand: Command = {
       // Only allow checking other users if the command user has manage channels permission
       if (targetUser.id !== interaction.user.id) {
         const member = interaction.guild?.members.cache.get(interaction.user.id);
+        // In DMs there's no guild context, so only allow checking your own status
         if (!member?.permissions.has('ManageChannels')) {
           await interaction.reply({
             content: '❌ You can only check your own status.',
@@ -39,11 +40,12 @@ const statusCommand: Command = {
         .setDescription(`Status for <@${targetUser.id}>`)
         .setTimestamp();
 
-      if (userData && userData.channelId) {
+      if (userData && (userData.channelId || userData.useDM)) {
         // Add basic configuration info
+        const destination = userData.useDM ? '📬 DMs' : `<#${userData.channelId}>`;
         embed.addFields(
           { name: 'Setup Status', value: '✅ Configured', inline: true },
-          { name: 'Check-in Channel', value: `<#${userData.channelId}>`, inline: true },
+          { name: 'Check-in Destination', value: destination, inline: true },
           { name: 'Save to CSV', value: userData.saveToCSV ? 'Yes' : 'No', inline: true }
         );
 
@@ -137,7 +139,7 @@ const statusCommand: Command = {
       } else {
         embed.addFields({
           name: 'Setup Status',
-          value: '❌ Not configured\nAsk an admin to use `/setup` to configure your check-in channel.',
+          value: '❌ Not configured\nAsk an admin to use `/setup` to configure check-ins for you.',
           inline: false,
         });
       }

@@ -55,13 +55,14 @@ export async function getAllUserData(): Promise<Map<string, UserData>> {
 }
 
 // Set user's channel configuration
-export async function setUserChannel(userId: string, channelId: string, saveToCSV: boolean = true) {
+export async function setUserChannel(userId: string, channelId: string, saveToCSV: boolean = true, useDM: boolean = false) {
   const userData = loadUserData();
   const existingUser = userData.get(userId);
 
   const userEntry: UserData = {
     userId,
     channelId,
+    useDM,
     saveToCSV,
     lastCheckIn: existingUser?.lastCheckIn,
     lastPing: existingUser?.lastPing,
