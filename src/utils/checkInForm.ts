@@ -1,3 +1,4 @@
+import { crmEnabledFor } from './crm';
 import {
   ActionRowBuilder,
   ModalBuilder,
@@ -57,7 +58,7 @@ function createCheckInModal(): ModalBuilder {
   return modal;
 }
 
-function createNightCheckInModal(): ModalBuilder {
+function createNightCheckInModal(userId?: string): ModalBuilder {
   const modal = new ModalBuilder()
     .setCustomId('night_checkin_modal')
     .setTitle('Nightly Reflection');
@@ -100,6 +101,18 @@ function createNightCheckInModal(): ModalBuilder {
   // Add rows to modal
   modal.addComponents(firstActionRow, secondActionRow, thirdActionRow);
 
+  // Who did you see today? Only for users linked to a CRM (CRM_DISCORD_USER_IDS)
+  if (userId && crmEnabledFor(userId)) {
+    const seenInput = new TextInputBuilder()
+      .setCustomId('seen_input')
+      .setLabel('Who did you see today?')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Names, one per line or separated by commas')
+      .setRequired(false)
+      .setMaxLength(1000);
+    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(seenInput));
+  }
+
   return modal;
 }
 
@@ -114,12 +127,12 @@ export async function showCheckInModalFromCommand(interaction: ChatInputCommandI
 }
 
 export async function showNightCheckInModal(interaction: ButtonInteraction) {
-  const modal = createNightCheckInModal();
+  const modal = createNightCheckInModal(interaction.user.id);
   await interaction.showModal(modal);
 }
 
 export async function showNightCheckInModalFromCommand(interaction: ChatInputCommandInteraction) {
-  const modal = createNightCheckInModal();
+  const modal = createNightCheckInModal(interaction.user.id);
   await interaction.showModal(modal);
 }
 
