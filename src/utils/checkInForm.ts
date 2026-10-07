@@ -107,7 +107,7 @@ function createNightCheckInModal(userId?: string): ModalBuilder {
       .setCustomId('seen_input')
       .setLabel('Who did you engage today?')
       .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder('Names, one per line or separated by commas')
+      .setPlaceholder('What you did with whom, one per line (e.g. messaged cam)')
       .setRequired(false)
       .setMaxLength(1000);
     modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(seenInput));

@@ -1,7 +1,9 @@
 // Optional link to Iggy's CRM (an HTTP API: POST <CRM_URL>/api/<tool> with a bearer token).
 // When CRM_URL, CRM_TOKEN and CRM_DISCORD_USER_IDS are set, the listed users get a
-// "Who did you engage today?" question in the nightly reflection. Names that match one
-// CRM person get a hangout logged for that day; other names get "Add" buttons.
+// "Who did you engage today?" question in the nightly reflection. Each line is what the user
+// did with someone ("messaged cam"). Claude reads out the people and the kind of contact.
+// Each person is matched in the CRM or added to it, and the line is logged for that day.
+import Anthropic from '@anthropic-ai/sdk';
 import { formatInTimeZone } from 'date-fns-tz';
 import { subDays } from 'date-fns';
 
@@ -29,17 +31,72 @@ async function crmCall<T = any>(tool: string, args: Record<string, unknown>): Pr
   return body as T;
 }
 
-/** Splits the answer into names: one per line, or separated by commas, "and" or "&". */
-export function parseNames(text: string): string[] {
+const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
+
+const KINDS = ['hangout', 'call', 'text', 'date', 'party', 'met'] as const;
+
+/** One thing the user did: the line as written, the people in it and the kind of contact. */
+export interface Engagement { line: string; people: string[]; kind: string }
+
+/** Splits the answer into lines: one per line, or separated by commas or semicolons. */
+export function splitLines(text: string): string[] {
   const seen = new Set<string>();
-  const names: string[] = [];
-  for (const raw of text.split(/\n|,|;|&|\band\b/i)) {
-    const name = raw.replace(/^[\s\-*•\d.)]+/, '').trim();
-    if (!name || name.length > 120) continue;
-    const key = name.toLowerCase();
-    if (!seen.has(key)) { seen.add(key); names.push(name); }
+  const lines: string[] = [];
+  for (const raw of text.split(/\n|,|;/)) {
+    const line = raw.replace(/^[\s\-*•\d.)]+/, '').trim();
+    if (!line || line.length > 300) continue;
+    const key = line.toLowerCase();
+    if (!seen.has(key)) { seen.add(key); lines.push(line); }
   }
-  return names.slice(0, 50);
+  return lines.slice(0, 50);
+}
+
+/** Without Claude: each short line is taken as a name, logged as a hangout. */
+function fallbackEngagements(text: string): Engagement[] {
+  return splitLines(text)
+    .filter(l => l.split(/\s+/).length <= 3)
+    .map(line => ({ line, people: [line], kind: 'hangout' }));
+}
+
+/** Reads the people and the kind of contact out of the answer. */
+export async function parseEngagements(text: string): Promise<Engagement[]> {
+  if (!anthropic) return fallbackEngagements(text);
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: `The user answered "Who did you engage today?" in a nightly reflection. Each item says what they did with one or more people, for example "messaged cam" or "chatted lucia at length". Items are separated by new lines or commas, but a comma can also be inside one item.
+
+For each item, return:
+- "line": the item as written (keep the user's words)
+- "people": the names of the people in it, written as a name (capitalize: "kat rice" -> "Kat Rice"). Leave out words that are not a person. Use [] if there is no person.
+- "kind": one of ${KINDS.join(', ')}. Messages, DMs, sexting and chats in text are "text". Voice or video is "call". In person is "hangout" unless it is a date or a party. Meeting someone new is "met".
+
+Respond with only a JSON array, no other text.
+
+<answer>
+${text}
+</answer>`,
+      }],
+    });
+    const out = response.content[0]?.type === 'text' ? response.content[0].text : '';
+    const json = out.slice(out.indexOf('['), out.lastIndexOf(']') + 1);
+    const items = JSON.parse(json) as any[];
+    return items
+      .filter(i => i && typeof i.line === 'string' && Array.isArray(i.people))
+      .map(i => ({
+        line: i.line.trim().slice(0, 300),
+        people: i.people.filter((p: unknown) => typeof p === 'string' && p.trim()).map((p: string) => p.trim().slice(0, 120)),
+        kind: (KINDS as readonly string[]).includes(i.kind) ? i.kind : 'hangout',
+      }))
+      .filter(i => i.line)
+      .slice(0, 50);
+  } catch (e) {
+    console.error('Could not parse the engage answer with Claude, using the fallback:', e);
+    return fallbackEngagements(text);
+  }
 }
 
 /** The day the reflection is about: before 5 am local time it still counts as yesterday. */
@@ -68,8 +125,8 @@ export async function matchPerson(name: string): Promise<PersonRow | null> {
   return first.length === 1 ? first[0] : null;
 }
 
-export async function logHangout(people: (number | string)[], day: string): Promise<void> {
-  await crmCall('log_interaction', { people, on: day, kind: 'hangout', summary: 'Seen today (nightly reflection)' });
+export async function logInteraction(people: number[], day: string, kind: string, summary: string): Promise<void> {
+  await crmCall('log_interaction', { people, on: day, kind, summary });
 }
 
 export async function addPerson(name: string): Promise<PersonRow> {
@@ -77,21 +134,46 @@ export async function addPerson(name: string): Promise<PersonRow> {
   return r.person;
 }
 
-export interface SeenResult { logged: string[]; unmatched: string[]; error?: string }
+export interface EngageResult {
+  logged: { line: string; people: string[] }[];
+  added: string[];
+  skipped: string[];
+  failed: string[];
+  error?: string;
+}
 
-export async function recordSeen(names: string[], day: string): Promise<SeenResult> {
-  const logged: string[] = [];
-  const unmatched: string[] = [];
-  const ids: number[] = [];
+/** Matches or adds each person, then logs each line as an interaction on that day. */
+export async function recordEngagements(items: Engagement[], day: string): Promise<EngageResult> {
+  const result: EngageResult = { logged: [], added: [], skipped: [], failed: [] };
+  const resolved = new Map<string, PersonRow | null>();
   try {
-    for (const name of names) {
-      const p = await matchPerson(name);
-      if (p && !ids.includes(p.id)) { ids.push(p.id); logged.push(p.name); }
-      else if (!p) unmatched.push(name);
+    for (const item of items) {
+      const people: PersonRow[] = [];
+      for (const name of item.people) {
+        const key = name.toLowerCase();
+        if (!resolved.has(key)) {
+          let p = await matchPerson(name);
+          if (!p) {
+            try {
+              p = await addPerson(name);
+              result.added.push(p.name);
+            } catch (e) {
+              // 409: the CRM thinks this is someone it already has, but the match was unclear
+              if (!(e instanceof CrmHttpError) || e.status !== 409) throw e;
+              result.failed.push(name);
+            }
+          }
+          resolved.set(key, p);
+        }
+        const p = resolved.get(key);
+        if (p && !people.some(x => x.id === p.id)) people.push(p);
+      }
+      if (!people.length) { result.skipped.push(item.line); continue; }
+      await logInteraction(people.map(p => p.id), day, item.kind, item.line);
+      result.logged.push({ line: item.line, people: people.map(p => p.name) });
     }
-    if (ids.length) await logHangout(ids, day);
-    return { logged, unmatched };
   } catch (e) {
-    return { logged: [], unmatched, error: e instanceof Error ? e.message : String(e) };
+    result.error = e instanceof Error ? e.message : String(e);
   }
+  return result;
 }

@@ -42,9 +42,6 @@ export default {
       } else if (interaction.customId === "start_night_checkin") {
         const { showNightCheckInModal } = await import("../utils/checkInForm");
         await showNightCheckInModal(interaction);
-      } else if (interaction.customId.startsWith("crm_add|")) {
-        const { handleAddButton } = await import("../handlers/seenHandler");
-        await handleAddButton(interaction);
       }
     }
 
