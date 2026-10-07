@@ -1,6 +1,6 @@
 // Optional link to Iggy's CRM (an HTTP API: POST <CRM_URL>/api/<tool> with a bearer token).
 // When CRM_URL, CRM_TOKEN and CRM_DISCORD_USER_IDS are set, the listed users get a
-// "Who did you see today?" question in the nightly reflection. Names that match one
+// "Who did you engage today?" question in the nightly reflection. Names that match one
 // CRM person get a hangout logged for that day; other names get "Add" buttons.
 import { formatInTimeZone } from 'date-fns-tz';
 import { subDays } from 'date-fns';

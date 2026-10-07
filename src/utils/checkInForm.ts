@@ -101,11 +101,11 @@ function createNightCheckInModal(userId?: string): ModalBuilder {
   // Add rows to modal
   modal.addComponents(firstActionRow, secondActionRow, thirdActionRow);
 
-  // Who did you see today? Only for users linked to a CRM (CRM_DISCORD_USER_IDS)
+  // Who did you engage today? Only for users linked to a CRM (CRM_DISCORD_USER_IDS)
   if (userId && crmEnabledFor(userId)) {
     const seenInput = new TextInputBuilder()
       .setCustomId('seen_input')
-      .setLabel('Who did you see today?')
+      .setLabel('Who did you engage today?')
       .setStyle(TextInputStyle.Paragraph)
       .setPlaceholder('Names, one per line or separated by commas')
       .setRequired(false)
