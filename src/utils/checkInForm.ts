@@ -1,10 +1,13 @@
 import { crmEnabledFor } from './crm';
+import { HABITS, habitsEnabledFor } from './habits';
 import {
   ActionRowBuilder,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
   ButtonInteraction,
+  LabelBuilder,
+  StringSelectMenuBuilder,
   ChatInputCommandInteraction,
   ButtonBuilder,
   ButtonStyle,
@@ -111,6 +114,22 @@ function createNightCheckInModal(userId?: string): ModalBuilder {
       .setRequired(false)
       .setMaxLength(1000);
     modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(seenInput));
+  }
+
+  // Nightly habits: pick the ones done; the rest count as "no". Only for HABIT_DISCORD_USER_IDS
+  if (userId && habitsEnabledFor(userId)) {
+    const habitSelect = new StringSelectMenuBuilder()
+      .setCustomId('habits_input')
+      .setMinValues(0)
+      .setMaxValues(HABITS.length)
+      .setRequired(false)
+      .addOptions(HABITS.map(h => ({ label: h.label.slice(0, 100), value: h.id })));
+    modal.addLabelComponents(
+      new LabelBuilder()
+        .setLabel('Before bed I did:')
+        .setDescription('Pick each one you did. The rest count as no.')
+        .setStringSelectMenuComponent(habitSelect)
+    );
   }
 
   return modal;

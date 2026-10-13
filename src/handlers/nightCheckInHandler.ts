@@ -5,6 +5,7 @@ import { getUserData, updateUserNightCheckIn } from '../utils/userDataManager';
 import { NightCheckInData } from '../types/userData';
 import { generateEmojiBlessing } from '../utils/emojiGenerator';
 import { handleSeenAnswer } from './seenHandler';
+import { handleHabitAnswers } from './habitHandler';
 
 export async function handleNightCheckInModal(interaction: ModalSubmitInteraction) {
   try {
@@ -65,6 +66,11 @@ export async function handleNightCheckInModal(interaction: ModalSubmitInteractio
     // Log who the user saw today in the CRM (only for CRM-linked users)
     handleSeenAnswer(interaction).catch((error) => {
       console.error('Error logging who was seen today:', error);
+    });
+
+    // Log tonight's habits in the Ledger (only for habit-linked users)
+    handleHabitAnswers(interaction).catch((error) => {
+      console.error('Error logging habits:', error);
     });
 
     // Generate emoji blessing asynchronously (non-blocking)
