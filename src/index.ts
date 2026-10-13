@@ -1,3 +1,5 @@
+// Must load before discord.js (it patches the gateway's WebSocket).
+import { makeRequest } from './utils/discordProxy';
 import { Client, GatewayIntentBits, Partials, Collection } from 'discord.js';
 import * as dotenv from 'dotenv';
 import { registerEvents } from './handlers/eventHandler';
@@ -21,6 +23,8 @@ const client = new Client({
   partials: [
     Partials.Channel, // Required to receive DM interactions
   ],
+  // Direct first; DISCORD_PROXY only after a Cloudflare IP ban, until the next start.
+  rest: { makeRequest: makeRequest as never },
 });
 
 // Create commands collection
