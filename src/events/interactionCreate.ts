@@ -45,6 +45,12 @@ export default {
       }
     }
 
+    // Handle select menus (0-100% ratings under the nightly habits message)
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("rating:")) {
+      const { handleRatingSelect } = await import("../handlers/habitHandler");
+      await handleRatingSelect(interaction).catch((error) => console.error("Rating select failed:", error));
+    }
+
     // Handle modal submissions
     if (interaction.isModalSubmit()) {
       if (interaction.customId === "checkin_modal") {
