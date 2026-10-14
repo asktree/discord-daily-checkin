@@ -137,8 +137,10 @@ export async function recordHabits(userId: string, day: string, doneIds: Set<str
 
   for (const r of results) {
     try {
-      if (r.habit.item) {
-        await ledgerCall('log', { id: r.habit.item, text: `${day}: ${r.done ? 'yes' : 'no'}`, agent: 'checkin' });
+      // Log only "yes". Ledger counts any log as an answer, so a "no" would take the
+      // routine card off her Queue while the night window is still open.
+      if (r.habit.item && r.done) {
+        await ledgerCall('log', { id: r.habit.item, text: `${day}: yes`, agent: 'checkin' });
       }
       if (r.habit.objective && r.habit.kpi) {
         const current = r.habit.kpiMode === 'count7' ? r.last7 : r.streak;

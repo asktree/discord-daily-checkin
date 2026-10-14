@@ -9,7 +9,7 @@ import { reflectionDay } from '../utils/crm';
 import { RATINGS, habitsEnabledFor, recordHabits, recordRating } from '../utils/habits';
 import { getUserData } from '../utils/userDataManager';
 
-/** After a nightly reflection: log each habit as yes or no in the Ledger and update its KPI. */
+/** After a nightly reflection: log each ticked habit as "yes" in the Ledger and update its KPI. */
 export async function handleHabitAnswers(interaction: ModalSubmitInteraction): Promise<void> {
   if (!habitsEnabledFor(interaction.user.id)) return;
   let picked: readonly string[];
